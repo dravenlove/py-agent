@@ -3,7 +3,15 @@ from fastapi import FastAPI, HTTPException
 from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
 from app.embedding_client import generate_embedding
 from app.llm_client import generate_reply
-from app.schemas import ChatRequest, ChatResponse, EmbeddingRequest, EmbeddingResponse
+from app.rerank_client import generate_rerank
+from app.schemas import (
+    ChatRequest,
+    ChatResponse,
+    EmbeddingRequest,
+    EmbeddingResponse,
+    RerankRequest,
+    RerankResponse,
+)
 from app.settings import settings
 
 app = FastAPI(title="AI Agent 30D", version="0.2.0")
@@ -58,3 +66,26 @@ def embeddings(payload: EmbeddingRequest) -> EmbeddingResponse:
         raise HTTPException(status_code=502, detail="Embedding request failed.") from exc
 
     return EmbeddingResponse(model=model_name, dimensions=len(vector), embedding=vector)
+
+
+@app.post("/rerank", response_model=RerankResponse)
+def rerank(payload: RerankRequest) -> RerankResponse:
+    try:
+        model_name, results = generate_rerank(payload.query, payload.documents, payload.top_n)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except UpstreamAuthError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail="Rerank authentication failed. Check RERANK_OPENAI_API_KEY and RERANK_OPENAI_BASE_URL.",
+        ) from exc
+    except UpstreamNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UpstreamTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except UpstreamServiceError as exc:
+        raise HTTPException(status_code=502, detail="Rerank request failed.") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Rerank request failed.") from exc
+
+    return RerankResponse(model=model_name, query=payload.query, results=results)
