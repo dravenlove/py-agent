@@ -2,8 +2,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from openai import OpenAI
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError,
+    NotFoundError,
+    OpenAI,
+)
 
+from app.errors import (
+    UpstreamAuthError,
+    UpstreamNotFoundError,
+    UpstreamServiceError,
+    UpstreamTimeoutError,
+)
 from app.settings import settings
 
 
@@ -88,30 +101,43 @@ def generate_reply(user_message: str) -> str:
     if style == "chat_completions":
         base_url = _normalize_chat_base_url(base_url)
 
-    client_kwargs: dict[str, str] = {"api_key": settings.chat_openai_api_key}
+    client_kwargs: dict[str, str | float] = {
+        "api_key": settings.chat_openai_api_key,
+        "timeout": settings.chat_timeout_seconds,
+    }
     if base_url:
         client_kwargs["base_url"] = base_url
     client = OpenAI(**client_kwargs)
 
-    if style == "chat_completions":
-        response = client.chat.completions.create(
-            model=settings.chat_model,
-            messages=[{"role": "user", "content": user_message}],
-        )
-        reply = _extract_chat_completions_text(response)
-    else:
-        response = client.responses.create(
-            model=settings.chat_model,
-            input=[
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": user_message}],
-                }
-            ],
-        )
-        reply = _extract_responses_text(response)
+    try:
+        if style == "chat_completions":
+            response = client.chat.completions.create(
+                model=settings.chat_model,
+                messages=[{"role": "user", "content": user_message}],
+            )
+            reply = _extract_chat_completions_text(response)
+        else:
+            response = client.responses.create(
+                model=settings.chat_model,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": user_message}],
+                    }
+                ],
+            )
+            reply = _extract_responses_text(response)
+    except APITimeoutError as exc:
+        raise UpstreamTimeoutError("Chat request to upstream provider timed out.") from exc
+    except AuthenticationError as exc:
+        raise UpstreamAuthError("Chat authentication failed with upstream provider.") from exc
+    except NotFoundError as exc:
+        raise UpstreamNotFoundError("Chat model or endpoint was not found upstream.") from exc
+    except APIConnectionError as exc:
+        raise UpstreamServiceError("Chat provider connection failed.") from exc
+    except APIStatusError as exc:
+        raise UpstreamServiceError(f"Chat provider returned status {exc.status_code}.") from exc
 
     if not reply:
-        raise RuntimeError("Model returned an empty response.")
+        raise UpstreamServiceError("Chat provider returned an empty response.")
     return reply
-

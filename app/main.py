@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
-from openai import AuthenticationError
 
+from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
 from app.embedding_client import generate_embedding
 from app.llm_client import generate_reply
 from app.schemas import ChatRequest, ChatResponse, EmbeddingRequest, EmbeddingResponse
@@ -20,11 +20,17 @@ def chat(payload: ChatRequest) -> ChatResponse:
         reply = generate_reply(payload.message)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except AuthenticationError as exc:
+    except UpstreamAuthError as exc:
         raise HTTPException(
             status_code=401,
             detail="Chat authentication failed. Check CHAT_OPENAI_API_KEY and CHAT_OPENAI_BASE_URL.",
         ) from exc
+    except UpstreamNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UpstreamTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except UpstreamServiceError as exc:
+        raise HTTPException(status_code=502, detail="Chat request failed.") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Chat request failed.") from exc
 
@@ -37,11 +43,17 @@ def embeddings(payload: EmbeddingRequest) -> EmbeddingResponse:
         model_name, vector = generate_embedding(payload.input)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except AuthenticationError as exc:
+    except UpstreamAuthError as exc:
         raise HTTPException(
             status_code=401,
             detail="Embedding authentication failed. Check EMBEDDING_OPENAI_API_KEY and EMBEDDING_OPENAI_BASE_URL.",
         ) from exc
+    except UpstreamNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UpstreamTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except UpstreamServiceError as exc:
+        raise HTTPException(status_code=502, detail="Embedding request failed.") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Embedding request failed.") from exc
 
