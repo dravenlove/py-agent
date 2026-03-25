@@ -41,3 +41,33 @@ def test_embeddings_with_mocked_client(monkeypatch) -> None:
 def test_embeddings_validation() -> None:
     response = client.post("/embeddings", json={"input": ""})
     assert response.status_code == 422
+
+
+def test_rerank_with_mocked_client(monkeypatch) -> None:
+    monkeypatch.setattr(
+        main_module,
+        "generate_rerank",
+        lambda query, documents, top_n=None: (
+            "mock-rerank-model",
+            [{"index": 0, "score": 0.97, "document": documents[0]}],
+        ),
+    )
+    response = client.post(
+        "/rerank",
+        json={
+            "query": "怎么重置密码",
+            "documents": ["进入设置页点击重置密码", "查看账单与发票"],
+            "top_n": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"] == "mock-rerank-model"
+    assert body["query"] == "怎么重置密码"
+    assert body["results"] == [{"index": 0, "score": 0.97, "document": "进入设置页点击重置密码"}]
+
+
+def test_rerank_validation() -> None:
+    response = client.post("/rerank", json={"query": "", "documents": []})
+    assert response.status_code == 422

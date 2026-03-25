@@ -15,6 +15,7 @@
 ## Day 2 Delivered
 - [x] `/chat` endpoint (`POST`)
 - [x] `/embeddings` endpoint (`POST`)
+- [x] `/rerank` endpoint (`POST`)
 - [x] OpenAI API integration (`responses.create`)
 - [x] Local CLI test scripts (`scripts/chat_cli.py`, `scripts/embedding_cli.py`, `scripts/rerank_cli.py`)
 - [x] Basic API tests (`tests/test_main.py`)
@@ -53,6 +54,25 @@ Invoke-RestMethod `
   -Body '{"input":"这是一段需要转换成向量的文本"}'
 ```
 
+4. Rerank:
+```powershell
+$body = @{
+  query = "怎么重置密码"
+  documents = @(
+    "进入设置页点击重置密码"
+    "查看账单与发票"
+    "联系客服修改邮箱"
+  )
+  top_n = 2
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/rerank `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
 ## Local CLI Test
 ```powershell
 python scripts/chat_cli.py --message "给我一个 Day 2 学习建议"
@@ -68,6 +88,7 @@ py-openclaw/
 │  ├─ embedding_client.py
 │  ├─ llm_client.py
 │  ├─ main.py
+│  ├─ rerank_client.py
 │  ├─ schemas.py
 │  └─ settings.py
 ├─ tests/
