@@ -20,6 +20,9 @@ class Settings:
     embedding_openai_base_url: str | None
     embedding_model: str
     embedding_encoding_format: str
+    rerank_openai_api_key: str | None
+    rerank_openai_base_url: str | None
+    rerank_model: str
 
 
 settings = Settings(
@@ -31,4 +34,7 @@ settings = Settings(
     embedding_openai_base_url=os.getenv("EMBEDDING_OPENAI_BASE_URL") or os.getenv("OPENAI_BASE_URL"),
     embedding_model=os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-4B"),
     embedding_encoding_format=os.getenv("EMBEDDING_ENCODING_FORMAT", "float"),
+    rerank_openai_api_key=os.getenv("RERANK_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY"),
+    rerank_openai_base_url=os.getenv("RERANK_OPENAI_BASE_URL") or os.getenv("OPENAI_BASE_URL"),
+    rerank_model=os.getenv("RERANK_MODEL", "jina-reranker-v3"),
 )
