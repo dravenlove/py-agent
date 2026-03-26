@@ -25,6 +25,8 @@
 - [x] Timeout config for chat, embeddings, and rerank upstream calls
 - [x] Shared retry/backoff helper for transient upstream failures
 - [x] Unified upstream error mapping (`401`, `404`, `504`, `502`)
+- [x] Request ID middleware and structured request logging
+- [x] In-memory metrics endpoint (`/metrics`)
 - [x] Async load test script (`scripts/load_test.py`)
 
 ## Quick Start
@@ -80,6 +82,11 @@ Invoke-RestMethod `
   -Body $body
 ```
 
+5. Metrics:
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/metrics
+```
+
 ## Local CLI Test
 ```powershell
 python scripts/chat_cli.py --message "给我一个 Day 2 学习建议"
@@ -101,6 +108,7 @@ py-openclaw/
 │  ├─ embedding_client.py
 │  ├─ llm_client.py
 │  ├─ main.py
+│  ├─ observability.py
 │  ├─ rerank_client.py
 │  ├─ schemas.py
 │  └─ settings.py

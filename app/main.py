@@ -1,8 +1,14 @@
-from fastapi import FastAPI, HTTPException
+import logging
+from time import perf_counter
+from uuid import uuid4
+
+from fastapi import FastAPI, HTTPException, Request
+from starlette.responses import Response
 
 from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
 from app.embedding_client import generate_embedding
 from app.llm_client import generate_reply
+from app.observability import get_request_id, metrics_store, reset_request_id, set_request_id
 from app.rerank_client import generate_rerank
 from app.schemas import (
     ChatRequest,
@@ -14,12 +20,52 @@ from app.schemas import (
 )
 from app.settings import settings
 
-app = FastAPI(title="AI Agent 30D", version="0.3.0")
+logger = logging.getLogger("ai_agent.http")
+
+app = FastAPI(title="AI Agent 30D", version="0.3.1")
+
+
+@app.middleware("http")
+async def request_context_middleware(request: Request, call_next) -> Response:
+    request_id = request.headers.get("X-Request-ID") or uuid4().hex[:12]
+    token = set_request_id(request_id)
+    request.state.request_id = request_id
+    started_at = perf_counter()
+    response: Response | None = None
+    status_code = 500
+
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        duration_ms = (perf_counter() - started_at) * 1000
+        if request.url.path != "/metrics":
+            metrics_store.record(request.url.path, status_code, duration_ms)
+        logger.info(
+            "[%s] %s %s -> %s (%.2f ms)",
+            request_id,
+            request.method,
+            request.url.path,
+            status_code,
+            duration_ms,
+        )
+        if response is not None:
+            response.headers["X-Request-ID"] = request_id
+        reset_request_id(token)
 
 
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "day": 3}
+
+
+@app.get("/metrics")
+async def metrics() -> dict[str, object]:
+    return {
+        "request_id": get_request_id(),
+        **metrics_store.snapshot(),
+    }
 
 
 @app.post("/chat", response_model=ChatResponse)
