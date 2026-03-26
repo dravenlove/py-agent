@@ -5,6 +5,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
+from app.observability import get_request_id
+
 T = TypeVar("T")
 
 logger = logging.getLogger("ai_agent.upstream")
@@ -22,12 +24,13 @@ async def run_with_retries(
 
     for attempt in range(1, total_attempts + 1):
         try:
-            logger.info("%s attempt %s/%s", operation_name, attempt, total_attempts)
+            logger.info("[%s] %s attempt %s/%s", get_request_id(), operation_name, attempt, total_attempts)
             return await attempt_fn()
         except Exception as exc:
             should_retry = attempt < total_attempts and is_retryable(exc)
             logger.warning(
-                "%s failed on attempt %s/%s with %s: %s",
+                "[%s] %s failed on attempt %s/%s with %s: %s",
+                get_request_id(),
                 operation_name,
                 attempt,
                 total_attempts,
@@ -38,7 +41,7 @@ async def run_with_retries(
                 raise
 
             delay_seconds = base_delay_seconds * (2 ** (attempt - 1))
-            logger.info("%s retrying in %.2fs", operation_name, delay_seconds)
+            logger.info("[%s] %s retrying in %.2fs", get_request_id(), operation_name, delay_seconds)
             await asyncio.sleep(delay_seconds)
 
     raise RuntimeError(f"{operation_name} retry loop exited unexpectedly.")
