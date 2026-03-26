@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 
 from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
+from app.retry import run_with_retries
 from app.settings import settings
 
 
@@ -16,7 +17,7 @@ def _extract_doc_text(doc: object, fallback: str) -> str:
     return fallback
 
 
-def generate_rerank(query: str, documents: list[str], top_n: int | None = None) -> tuple[str, list[dict[str, object]]]:
+async def generate_rerank(query: str, documents: list[str], top_n: int | None = None) -> tuple[str, list[dict[str, object]]]:
     if not settings.rerank_openai_api_key:
         raise ValueError("RERANK_OPENAI_API_KEY is missing. Please set it in your .env file.")
     if not settings.rerank_openai_base_url:
@@ -37,8 +38,14 @@ def generate_rerank(query: str, documents: list[str], top_n: int | None = None) 
     }
 
     try:
-        response = httpx.post(url, headers=headers, json=payload, timeout=settings.rerank_timeout_seconds)
-        response.raise_for_status()
+        async with httpx.AsyncClient(timeout=settings.rerank_timeout_seconds) as client:
+            response = await run_with_retries(
+                operation_name="rerank",
+                attempt_fn=lambda: _request_rerank_response(client, url, headers, payload),
+                is_retryable=_is_retryable_httpx_error,
+                max_retries=settings.rerank_max_retries,
+                base_delay_seconds=settings.retry_backoff_seconds,
+            )
     except httpx.TimeoutException as exc:
         raise UpstreamTimeoutError("Rerank request to upstream provider timed out.") from exc
     except httpx.HTTPStatusError as exc:
@@ -77,3 +84,22 @@ def generate_rerank(query: str, documents: list[str], top_n: int | None = None) 
         )
 
     return settings.rerank_model, normalized
+
+
+async def _request_rerank_response(
+    client: httpx.AsyncClient,
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, object],
+) -> httpx.Response:
+    response = await client.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+    return response
+
+
+def _is_retryable_httpx_error(exc: Exception) -> bool:
+    if isinstance(exc, (httpx.TimeoutException, httpx.RequestError)):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in {408, 409, 429, 500, 502, 503, 504}
+    return False

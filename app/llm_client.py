@@ -6,9 +6,9 @@ from openai import (
     APIConnectionError,
     APIStatusError,
     APITimeoutError,
+    AsyncOpenAI,
     AuthenticationError,
     NotFoundError,
-    OpenAI,
 )
 
 from app.errors import (
@@ -17,6 +17,7 @@ from app.errors import (
     UpstreamServiceError,
     UpstreamTimeoutError,
 )
+from app.retry import run_with_retries
 from app.settings import settings
 
 
@@ -92,7 +93,7 @@ def _resolve_chat_api_style(base_url: str | None, style_raw: str) -> str:
     return style
 
 
-def generate_reply(user_message: str) -> str:
+async def generate_reply(user_message: str) -> str:
     if not settings.chat_openai_api_key:
         raise ValueError("CHAT_OPENAI_API_KEY is missing. Please set it in your .env file.")
 
@@ -107,26 +108,16 @@ def generate_reply(user_message: str) -> str:
     }
     if base_url:
         client_kwargs["base_url"] = base_url
-    client = OpenAI(**client_kwargs)
+    client = AsyncOpenAI(**client_kwargs)
 
     try:
-        if style == "chat_completions":
-            response = client.chat.completions.create(
-                model=settings.chat_model,
-                messages=[{"role": "user", "content": user_message}],
-            )
-            reply = _extract_chat_completions_text(response)
-        else:
-            response = client.responses.create(
-                model=settings.chat_model,
-                input=[
-                    {
-                        "role": "user",
-                        "content": [{"type": "input_text", "text": user_message}],
-                    }
-                ],
-            )
-            reply = _extract_responses_text(response)
+        response = await run_with_retries(
+            operation_name="chat",
+            attempt_fn=lambda: _request_chat_response(client, style, user_message),
+            is_retryable=_is_retryable_openai_error,
+            max_retries=settings.chat_max_retries,
+            base_delay_seconds=settings.retry_backoff_seconds,
+        )
     except APITimeoutError as exc:
         raise UpstreamTimeoutError("Chat request to upstream provider timed out.") from exc
     except AuthenticationError as exc:
@@ -138,6 +129,37 @@ def generate_reply(user_message: str) -> str:
     except APIStatusError as exc:
         raise UpstreamServiceError(f"Chat provider returned status {exc.status_code}.") from exc
 
+    if style == "chat_completions":
+        reply = _extract_chat_completions_text(response)
+    else:
+        reply = _extract_responses_text(response)
+
     if not reply:
         raise UpstreamServiceError("Chat provider returned an empty response.")
     return reply
+
+
+async def _request_chat_response(client: AsyncOpenAI, style: str, user_message: str) -> Any:
+    if style == "chat_completions":
+        return await client.chat.completions.create(
+            model=settings.chat_model,
+            messages=[{"role": "user", "content": user_message}],
+        )
+
+    return await client.responses.create(
+        model=settings.chat_model,
+        input=[
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": user_message}],
+            }
+        ],
+    )
+
+
+def _is_retryable_openai_error(exc: Exception) -> bool:
+    if isinstance(exc, (APITimeoutError, APIConnectionError)):
+        return True
+    if isinstance(exc, APIStatusError):
+        return exc.status_code in {408, 409, 429, 500, 502, 503, 504}
+    return False

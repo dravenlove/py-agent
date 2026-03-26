@@ -10,11 +10,14 @@ client = TestClient(app)
 def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "day": 2}
+    assert response.json() == {"status": "ok", "day": 3}
 
 
 def test_chat_with_mocked_llm(monkeypatch) -> None:
-    monkeypatch.setattr(main_module, "generate_reply", lambda _: "mocked answer")
+    async def mock_generate_reply(_: str) -> str:
+        return "mocked answer"
+
+    monkeypatch.setattr(main_module, "generate_reply", mock_generate_reply)
     response = client.post("/chat", json={"message": "hello"})
 
     assert response.status_code == 200
@@ -29,43 +32,46 @@ def test_chat_validation() -> None:
 
 
 def test_chat_maps_auth_error(monkeypatch) -> None:
-    monkeypatch.setattr(main_module, "generate_reply", lambda _: (_ for _ in ()).throw(UpstreamAuthError("auth failed")))
+    async def mock_generate_reply(_: str) -> str:
+        raise UpstreamAuthError("auth failed")
+
+    monkeypatch.setattr(main_module, "generate_reply", mock_generate_reply)
     response = client.post("/chat", json={"message": "hello"})
     assert response.status_code == 401
 
 
 def test_chat_maps_not_found_error(monkeypatch) -> None:
-    monkeypatch.setattr(
-        main_module,
-        "generate_reply",
-        lambda _: (_ for _ in ()).throw(UpstreamNotFoundError("not found")),
-    )
+    async def mock_generate_reply(_: str) -> str:
+        raise UpstreamNotFoundError("not found")
+
+    monkeypatch.setattr(main_module, "generate_reply", mock_generate_reply)
     response = client.post("/chat", json={"message": "hello"})
     assert response.status_code == 404
 
 
 def test_chat_maps_timeout_error(monkeypatch) -> None:
-    monkeypatch.setattr(
-        main_module,
-        "generate_reply",
-        lambda _: (_ for _ in ()).throw(UpstreamTimeoutError("timed out")),
-    )
+    async def mock_generate_reply(_: str) -> str:
+        raise UpstreamTimeoutError("timed out")
+
+    monkeypatch.setattr(main_module, "generate_reply", mock_generate_reply)
     response = client.post("/chat", json={"message": "hello"})
     assert response.status_code == 504
 
 
 def test_chat_maps_generic_upstream_error(monkeypatch) -> None:
-    monkeypatch.setattr(
-        main_module,
-        "generate_reply",
-        lambda _: (_ for _ in ()).throw(UpstreamServiceError("provider failed")),
-    )
+    async def mock_generate_reply(_: str) -> str:
+        raise UpstreamServiceError("provider failed")
+
+    monkeypatch.setattr(main_module, "generate_reply", mock_generate_reply)
     response = client.post("/chat", json={"message": "hello"})
     assert response.status_code == 502
 
 
 def test_embeddings_with_mocked_client(monkeypatch) -> None:
-    monkeypatch.setattr(main_module, "generate_embedding", lambda _: ("mock-emb-model", [0.1, 0.2, 0.3]))
+    async def mock_generate_embedding(_: str) -> tuple[str, list[float]]:
+        return "mock-emb-model", [0.1, 0.2, 0.3]
+
+    monkeypatch.setattr(main_module, "generate_embedding", mock_generate_embedding)
     response = client.post("/embeddings", json={"input": "hello"})
 
     assert response.status_code == 200
@@ -80,15 +86,29 @@ def test_embeddings_validation() -> None:
     assert response.status_code == 422
 
 
+def test_embeddings_maps_timeout_error(monkeypatch) -> None:
+    async def mock_generate_embedding(_: str) -> tuple[str, list[float]]:
+        raise UpstreamTimeoutError("timed out")
+
+    monkeypatch.setattr(main_module, "generate_embedding", mock_generate_embedding)
+    response = client.post("/embeddings", json={"input": "hello"})
+    assert response.status_code == 504
+
+
+def test_embeddings_maps_auth_error(monkeypatch) -> None:
+    async def mock_generate_embedding(_: str) -> tuple[str, list[float]]:
+        raise UpstreamAuthError("auth failed")
+
+    monkeypatch.setattr(main_module, "generate_embedding", mock_generate_embedding)
+    response = client.post("/embeddings", json={"input": "hello"})
+    assert response.status_code == 401
+
+
 def test_rerank_with_mocked_client(monkeypatch) -> None:
-    monkeypatch.setattr(
-        main_module,
-        "generate_rerank",
-        lambda query, documents, top_n=None: (
-            "mock-rerank-model",
-            [{"index": 0, "score": 0.97, "document": documents[0]}],
-        ),
-    )
+    async def mock_generate_rerank(query: str, documents: list[str], top_n: int | None = None) -> tuple[str, list[dict[str, object]]]:
+        return "mock-rerank-model", [{"index": 0, "score": 0.97, "document": documents[0]}]
+
+    monkeypatch.setattr(main_module, "generate_rerank", mock_generate_rerank)
     response = client.post(
         "/rerank",
         json={
@@ -106,21 +126,19 @@ def test_rerank_with_mocked_client(monkeypatch) -> None:
 
 
 def test_rerank_maps_auth_error(monkeypatch) -> None:
-    monkeypatch.setattr(
-        main_module,
-        "generate_rerank",
-        lambda query, documents, top_n=None: (_ for _ in ()).throw(UpstreamAuthError("auth failed")),
-    )
+    async def mock_generate_rerank(query: str, documents: list[str], top_n: int | None = None) -> tuple[str, list[dict[str, object]]]:
+        raise UpstreamAuthError("auth failed")
+
+    monkeypatch.setattr(main_module, "generate_rerank", mock_generate_rerank)
     response = client.post("/rerank", json={"query": "hello", "documents": ["doc"]})
     assert response.status_code == 401
 
 
 def test_rerank_maps_timeout_error(monkeypatch) -> None:
-    monkeypatch.setattr(
-        main_module,
-        "generate_rerank",
-        lambda query, documents, top_n=None: (_ for _ in ()).throw(UpstreamTimeoutError("timed out")),
-    )
+    async def mock_generate_rerank(query: str, documents: list[str], top_n: int | None = None) -> tuple[str, list[dict[str, object]]]:
+        raise UpstreamTimeoutError("timed out")
+
+    monkeypatch.setattr(main_module, "generate_rerank", mock_generate_rerank)
     response = client.post("/rerank", json={"query": "hello", "documents": ["doc"]})
     assert response.status_code == 504
 

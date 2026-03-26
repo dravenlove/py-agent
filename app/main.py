@@ -14,18 +14,18 @@ from app.schemas import (
 )
 from app.settings import settings
 
-app = FastAPI(title="AI Agent 30D", version="0.2.0")
+app = FastAPI(title="AI Agent 30D", version="0.3.0")
 
 
 @app.get("/health")
-def health() -> dict:
-    return {"status": "ok", "day": 2}
+async def health() -> dict:
+    return {"status": "ok", "day": 3}
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest) -> ChatResponse:
+async def chat(payload: ChatRequest) -> ChatResponse:
     try:
-        reply = generate_reply(payload.message)
+        reply = await generate_reply(payload.message)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except UpstreamAuthError as exc:
@@ -46,9 +46,9 @@ def chat(payload: ChatRequest) -> ChatResponse:
 
 
 @app.post("/embeddings", response_model=EmbeddingResponse)
-def embeddings(payload: EmbeddingRequest) -> EmbeddingResponse:
+async def embeddings(payload: EmbeddingRequest) -> EmbeddingResponse:
     try:
-        model_name, vector = generate_embedding(payload.input)
+        model_name, vector = await generate_embedding(payload.input)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except UpstreamAuthError as exc:
@@ -69,9 +69,9 @@ def embeddings(payload: EmbeddingRequest) -> EmbeddingResponse:
 
 
 @app.post("/rerank", response_model=RerankResponse)
-def rerank(payload: RerankRequest) -> RerankResponse:
+async def rerank(payload: RerankRequest) -> RerankResponse:
     try:
-        model_name, results = generate_rerank(payload.query, payload.documents, payload.top_n)
+        model_name, results = await generate_rerank(payload.query, payload.documents, payload.top_n)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except UpstreamAuthError as exc:

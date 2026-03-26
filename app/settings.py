@@ -17,15 +17,19 @@ class Settings:
     chat_model: str
     chat_api_style: str
     chat_timeout_seconds: float
+    chat_max_retries: int
     embedding_openai_api_key: str | None
     embedding_openai_base_url: str | None
     embedding_model: str
     embedding_encoding_format: str
     embedding_timeout_seconds: float
+    embedding_max_retries: int
     rerank_openai_api_key: str | None
     rerank_openai_base_url: str | None
     rerank_model: str
     rerank_timeout_seconds: float
+    rerank_max_retries: int
+    retry_backoff_seconds: float
 
 
 settings = Settings(
@@ -34,13 +38,17 @@ settings = Settings(
     chat_model=os.getenv("CHAT_MODEL") or os.getenv("MODEL", "gpt-5.4-mini"),
     chat_api_style=os.getenv("CHAT_API_STYLE", "responses"),
     chat_timeout_seconds=float(os.getenv("CHAT_TIMEOUT_SECONDS", "30")),
+    chat_max_retries=int(os.getenv("CHAT_MAX_RETRIES", "2")),
     embedding_openai_api_key=os.getenv("EMBEDDING_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY"),
     embedding_openai_base_url=os.getenv("EMBEDDING_OPENAI_BASE_URL") or os.getenv("OPENAI_BASE_URL"),
     embedding_model=os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-4B"),
     embedding_encoding_format=os.getenv("EMBEDDING_ENCODING_FORMAT", "float"),
     embedding_timeout_seconds=float(os.getenv("EMBEDDING_TIMEOUT_SECONDS", "30")),
+    embedding_max_retries=int(os.getenv("EMBEDDING_MAX_RETRIES", "2")),
     rerank_openai_api_key=os.getenv("RERANK_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY"),
     rerank_openai_base_url=os.getenv("RERANK_OPENAI_BASE_URL") or os.getenv("OPENAI_BASE_URL"),
     rerank_model=os.getenv("RERANK_MODEL", "jina-reranker-v3"),
     rerank_timeout_seconds=float(os.getenv("RERANK_TIMEOUT_SECONDS", "30")),
+    rerank_max_retries=int(os.getenv("RERANK_MAX_RETRIES", "2")),
+    retry_backoff_seconds=float(os.getenv("RETRY_BACKOFF_SECONDS", "0.5")),
 )
