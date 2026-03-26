@@ -5,12 +5,15 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Request
 from starlette.responses import Response
 
+from app.agent_service import run_agent
 from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
 from app.embedding_client import generate_embedding
 from app.llm_client import generate_reply
 from app.observability import get_request_id, metrics_store, reset_request_id, set_request_id
 from app.rerank_client import generate_rerank
 from app.schemas import (
+    AgentRequest,
+    AgentResponse,
     ChatRequest,
     ChatResponse,
     EmbeddingRequest,
@@ -22,7 +25,7 @@ from app.settings import settings
 
 logger = logging.getLogger("ai_agent.http")
 
-app = FastAPI(title="AI Agent 30D", version="0.3.1")
+app = FastAPI(title="AI Agent 30D", version="0.4.0")
 
 
 @app.middleware("http")
@@ -57,7 +60,7 @@ async def request_context_middleware(request: Request, call_next) -> Response:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "day": 3}
+    return {"status": "ok", "day": 4}
 
 
 @app.get("/metrics")
@@ -135,3 +138,21 @@ async def rerank(payload: RerankRequest) -> RerankResponse:
         raise HTTPException(status_code=502, detail="Rerank request failed.") from exc
 
     return RerankResponse(model=model_name, query=payload.query, results=results)
+
+
+@app.post("/agent", response_model=AgentResponse)
+async def agent(payload: AgentRequest) -> AgentResponse:
+    try:
+        return await run_agent(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except UpstreamAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except UpstreamNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UpstreamTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except UpstreamServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Agent request failed.") from exc

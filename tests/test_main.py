@@ -5,6 +5,7 @@ import app.main as main_module
 from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
 from app.main import app
 from app.observability import metrics_store
+from app.schemas import AgentResponse, AgentStep
 
 client = TestClient(app)
 
@@ -17,7 +18,7 @@ def reset_metrics() -> None:
 def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "day": 3}
+    assert response.json() == {"status": "ok", "day": 4}
     assert "X-Request-ID" in response.headers
 
 
@@ -197,3 +198,31 @@ def test_metrics_counts_failed_requests(monkeypatch) -> None:
     assert body["routes"]["/chat"]["requests"] == 1
     assert body["routes"]["/chat"]["failures"] == 1
     assert body["routes"]["/chat"]["last_status_code"] == 504
+
+
+def test_agent_endpoint_with_mocked_service(monkeypatch) -> None:
+    async def mock_run_agent(_payload) -> AgentResponse:
+        return AgentResponse(
+            input="请把这句话转成向量",
+            selected_tool="embed_text",
+            steps=[
+                AgentStep(name="inspect_input", status="completed", detail="Parsed request."),
+                AgentStep(name="run_tool", status="completed", detail="Embedded text."),
+            ],
+            final_answer="已完成向量化。",
+            tool_input={"input_text": "请把这句话转成向量"},
+            tool_output={"dimensions": 3},
+        )
+
+    monkeypatch.setattr(main_module, "run_agent", mock_run_agent)
+    response = client.post("/agent", json={"input": "请把这句话转成向量"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selected_tool"] == "embed_text"
+    assert body["tool_output"]["dimensions"] == 3
+
+
+def test_agent_validation() -> None:
+    response = client.post("/agent", json={"input": ""})
+    assert response.status_code == 422

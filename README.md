@@ -29,6 +29,13 @@
 - [x] In-memory metrics endpoint (`/metrics`)
 - [x] Async load test script (`scripts/load_test.py`)
 
+## Day 4 Delivered
+- [x] Tool registry (`embed_text`, `rerank_documents`, `calculator`)
+- [x] Rule-based agent runner with execution steps
+- [x] `/agent` endpoint (`POST`)
+- [x] Local agent CLI (`scripts/agent_cli.py`)
+- [x] Agent service tests and endpoint tests
+
 ## Quick Start
 ```powershell
 py -3.11 -m venv .venv
@@ -87,11 +94,22 @@ Invoke-RestMethod `
 Invoke-RestMethod http://127.0.0.1:8000/metrics
 ```
 
+6. Agent:
+```powershell
+Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/agent `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"input":"请计算 23 * 7"}'
+```
+
 ## Local CLI Test
 ```powershell
 python scripts/chat_cli.py --message "给我一个 Day 2 学习建议"
 python scripts/embedding_cli.py --text "这是一段需要转换成向量的文本"
 python scripts/rerank_cli.py --query "怎么重置密码" --doc "进入设置页点击重置密码" --doc "查看账单与发票" --doc "联系客服修改邮箱"
+python scripts/agent_cli.py --input "请计算 23 * 7"
+python scripts/agent_cli.py --input "帮我找出最相关的文档" --doc "进入设置页点击重置密码" --doc "联系客服修改邮箱"
 ```
 
 ## Day 3 Load Test
@@ -105,16 +123,20 @@ python scripts/load_test.py --endpoint rerank --count 10 --concurrency 5 --text 
 py-openclaw/
 ├─ app/
 │  ├─ __init__.py
+│  ├─ agent_service.py
 │  ├─ embedding_client.py
 │  ├─ llm_client.py
 │  ├─ main.py
 │  ├─ observability.py
 │  ├─ rerank_client.py
+│  ├─ tools.py
 │  ├─ schemas.py
 │  └─ settings.py
 ├─ tests/
+│  ├─ test_agent_service.py
 │  └─ test_main.py
 ├─ scripts/
+│  ├─ agent_cli.py
 │  ├─ chat_cli.py
 │  ├─ embedding_cli.py
 │  ├─ load_test.py
