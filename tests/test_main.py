@@ -1,16 +1,24 @@
+import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
 from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
 from app.main import app
+from app.observability import metrics_store
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def reset_metrics() -> None:
+    metrics_store.reset()
 
 
 def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "day": 3}
+    assert "X-Request-ID" in response.headers
 
 
 def test_chat_with_mocked_llm(monkeypatch) -> None:
@@ -146,3 +154,46 @@ def test_rerank_maps_timeout_error(monkeypatch) -> None:
 def test_rerank_validation() -> None:
     response = client.post("/rerank", json={"query": "", "documents": []})
     assert response.status_code == 422
+
+
+def test_metrics_counts_successful_requests(monkeypatch) -> None:
+    async def mock_generate_reply(_: str) -> str:
+        return "ok"
+
+    monkeypatch.setattr(main_module, "generate_reply", mock_generate_reply)
+
+    health_response = client.get("/health")
+    chat_response = client.post("/chat", json={"message": "hello"})
+    metrics_response = client.get("/metrics")
+
+    assert health_response.status_code == 200
+    assert chat_response.status_code == 200
+    assert metrics_response.status_code == 200
+
+    body = metrics_response.json()
+    assert body["requests_total"] == 2
+    assert body["failures_total"] == 0
+    assert body["routes"]["/health"]["requests"] == 1
+    assert body["routes"]["/chat"]["requests"] == 1
+    assert body["routes"]["/chat"]["last_status_code"] == 200
+    assert body["request_id"] == metrics_response.headers["X-Request-ID"]
+
+
+def test_metrics_counts_failed_requests(monkeypatch) -> None:
+    async def mock_generate_reply(_: str) -> str:
+        raise UpstreamTimeoutError("timed out")
+
+    monkeypatch.setattr(main_module, "generate_reply", mock_generate_reply)
+
+    failed_response = client.post("/chat", json={"message": "hello"})
+    metrics_response = client.get("/metrics")
+
+    assert failed_response.status_code == 504
+    assert metrics_response.status_code == 200
+
+    body = metrics_response.json()
+    assert body["requests_total"] == 1
+    assert body["failures_total"] == 1
+    assert body["routes"]["/chat"]["requests"] == 1
+    assert body["routes"]["/chat"]["failures"] == 1
+    assert body["routes"]["/chat"]["last_status_code"] == 504
