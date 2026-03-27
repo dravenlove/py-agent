@@ -45,6 +45,11 @@ class SessionMemoryStore:
                         return [str(doc) for doc in documents]
         return None
 
+    def clear_session(self, session_id: str) -> int:
+        with self._lock:
+            history = self._sessions.pop(session_id, [])
+            return len(history)
+
     def reset(self) -> None:
         with self._lock:
             self._sessions = {}

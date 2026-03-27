@@ -25,7 +25,7 @@ from app.settings import settings
 
 logger = logging.getLogger("ai_agent.http")
 
-app = FastAPI(title="AI Agent 30D", version="0.4.0")
+app = FastAPI(title="AI Agent 30D", version="0.6.0")
 
 
 @app.middleware("http")
@@ -60,7 +60,7 @@ async def request_context_middleware(request: Request, call_next) -> Response:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "day": 5}
+    return {"status": "ok", "day": 6}
 
 
 @app.get("/metrics")

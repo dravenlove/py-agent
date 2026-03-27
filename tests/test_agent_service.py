@@ -139,3 +139,66 @@ async def test_run_agent_reuses_session_documents() -> None:
     assert second.tool_input["documents"] == ["文档A", "文档B"]
     assert second.planned_tools[0] == "rerank_documents"
     monkeypatch.undo()
+
+
+@pytest.mark.anyio
+async def test_run_agent_requires_confirmation_before_clearing_memory() -> None:
+    memory_store.append_interaction(
+        session_id="session-risk",
+        user_input="旧请求",
+        planned_tools=["rerank_documents"],
+        tool_input={"documents": ["文档A"]},
+        tool_output={"best_match": {"document": "文档A"}},
+        final_answer="旧回答",
+    )
+
+    response = await agent_service.run_agent(
+        AgentRequest(input="请清空这个会话的记忆", session_id="session-risk")
+    )
+
+    assert response.status == "needs_confirmation"
+    assert response.selected_tool == "clear_session_memory"
+    assert response.approval_required is True
+    assert "confirm=true" in response.final_answer
+    assert memory_store.get_recent("session-risk")
+
+
+@pytest.mark.anyio
+async def test_run_agent_clears_session_memory_after_confirmation() -> None:
+    memory_store.append_interaction(
+        session_id="session-risk",
+        user_input="旧请求",
+        planned_tools=["rerank_documents"],
+        tool_input={"documents": ["文档A"]},
+        tool_output={"best_match": {"document": "文档A"}},
+        final_answer="旧回答",
+    )
+
+    response = await agent_service.run_agent(
+        AgentRequest(input="请清空这个会话的记忆", session_id="session-risk", confirm=True)
+    )
+
+    assert response.status == "completed"
+    assert response.selected_tool == "clear_session_memory"
+    assert response.tool_output["deleted_count"] == 1
+    assert memory_store.get_recent("session-risk") == []
+
+
+@pytest.mark.anyio
+async def test_run_agent_can_reject_risky_action() -> None:
+    memory_store.append_interaction(
+        session_id="session-risk",
+        user_input="旧请求",
+        planned_tools=["rerank_documents"],
+        tool_input={"documents": ["文档A"]},
+        tool_output={"best_match": {"document": "文档A"}},
+        final_answer="旧回答",
+    )
+
+    response = await agent_service.run_agent(
+        AgentRequest(input="请清空这个会话的记忆", session_id="session-risk", confirm=False)
+    )
+
+    assert response.status == "cancelled"
+    assert response.selected_tool == "clear_session_memory"
+    assert memory_store.get_recent("session-risk")
