@@ -15,6 +15,17 @@ _EMBED_KEYWORDS = ("向量", "embedding", "embed", "嵌入")
 _SUMMARY_KEYWORDS = ("总结", "概括", "摘要", "summary", "summarize")
 _RERANK_HINTS = ("重排", "排序", "相关", "最相关", "比较", "compare")
 _MEMORY_DOCUMENT_HINTS = ("这些文档", "刚才的文档", "上面的文档", "继续比较")
+_CLEAR_MEMORY_KEYWORDS = (
+    "清空记忆",
+    "删除记忆",
+    "清除记忆",
+    "重置会话",
+    "忘掉这些内容",
+    "清空这个会话",
+    "clear memory",
+    "delete memory",
+    "reset session",
+)
 _EXPRESSION_PATTERN = re.compile(r"[0-9\.\s\+\-\*\/%\(\)]+")
 _CALCULATOR_KEYWORDS = ("计算", "算一下", "等于", "多少", "calc", "calculator")
 
@@ -24,6 +35,8 @@ class PlannedAction:
     tool_name: str
     tool_input: dict[str, Any]
     detail: str
+    requires_confirmation: bool = False
+    confirmation_message: str | None = None
 
 
 async def run_agent(payload: AgentRequest) -> AgentResponse:
@@ -64,6 +77,7 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
             )
         )
         response = AgentResponse(
+            status="completed",
             input=payload.input,
             selected_tool="unsupported",
             planned_tools=[],
@@ -71,6 +85,8 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
             final_answer=_build_unsupported_message(),
             session_id=payload.session_id,
             memory_used=memory_used,
+            approval_required=False,
+            approval_message=None,
             tool_input=None,
             tool_output={"available_tools": list_tools()},
         )
@@ -89,6 +105,55 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
     registry = get_tool_registry()
     first_tool_input: dict[str, Any] | None = None
     current_output: dict[str, Any] | None = None
+    first_action = planned_actions[0]
+
+    if first_action.requires_confirmation:
+        approval_message = first_action.confirmation_message or "This action requires explicit confirmation."
+        if payload.confirm is None:
+            steps.append(AgentStep(name="await_confirmation", status="pending", detail=approval_message))
+            return AgentResponse(
+                status="needs_confirmation",
+                input=payload.input,
+                selected_tool=first_action.tool_name,
+                planned_tools=[action.tool_name for action in planned_actions],
+                steps=steps,
+                final_answer=approval_message,
+                session_id=payload.session_id,
+                memory_used=memory_used,
+                approval_required=True,
+                approval_message=approval_message,
+                tool_input=dict(first_action.tool_input),
+                tool_output=None,
+            )
+        if payload.confirm is False:
+            steps.append(
+                AgentStep(
+                    name="confirmation_rejected",
+                    status="completed",
+                    detail="Cancelled the risky action because confirmation was explicitly rejected.",
+                )
+            )
+            return AgentResponse(
+                status="cancelled",
+                input=payload.input,
+                selected_tool=first_action.tool_name,
+                planned_tools=[action.tool_name for action in planned_actions],
+                steps=steps,
+                final_answer="已取消这次高风险操作，没有执行任何修改。",
+                session_id=payload.session_id,
+                memory_used=memory_used,
+                approval_required=False,
+                approval_message=None,
+                tool_input=dict(first_action.tool_input),
+                tool_output=None,
+            )
+        steps.append(
+            AgentStep(
+                name="confirmation_received",
+                status="completed",
+                detail="Received explicit confirmation and continued with the risky action.",
+            )
+        )
 
     for action in planned_actions:
         logger.info("Selected tool %s for input: %s", action.tool_name, payload.input)
@@ -103,6 +168,7 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
     assert current_output is not None
     selected_tool = planned_actions[0].tool_name
     response = AgentResponse(
+        status="completed",
         input=payload.input,
         selected_tool=selected_tool,
         planned_tools=[action.tool_name for action in planned_actions],
@@ -110,6 +176,8 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
         final_answer=_build_final_answer(planned_actions[-1].tool_name, current_output),
         session_id=payload.session_id,
         memory_used=memory_used,
+        approval_required=False,
+        approval_message=None,
         tool_input=first_tool_input,
         tool_output=current_output,
     )
@@ -121,6 +189,24 @@ def _plan_actions(payload: AgentRequest) -> list[PlannedAction]:
     text = payload.input.strip()
     lowered = text.lower()
     expression = _extract_expression(text)
+
+    if _contains_any(lowered, tuple(item.lower() for item in _CLEAR_MEMORY_KEYWORDS)) or _contains_any(
+        text, _CLEAR_MEMORY_KEYWORDS
+    ):
+        if not payload.session_id:
+            raise ValueError("Clearing session memory requires a session_id.")
+        return [
+            PlannedAction(
+                tool_name="clear_session_memory",
+                tool_input={"session_id": payload.session_id},
+                detail=f"Detected a session memory reset request for session `{payload.session_id}`.",
+                requires_confirmation=True,
+                confirmation_message=(
+                    f"该操作会永久清空会话 `{payload.session_id}` 的记忆。"
+                    "如果你确认要执行，请在下一次请求里传入 `confirm=true`。"
+                ),
+            )
+        ]
 
     if expression and (_contains_any(lowered, _CALCULATOR_KEYWORDS) or _looks_like_expression(text, expression)):
         return [
@@ -227,16 +313,29 @@ def _build_final_answer(last_tool_name: str, tool_output: dict[str, Any]) -> str
     if last_tool_name == "calculator":
         return f"计算完成：{tool_output['expression']} = {tool_output['result']}"
 
+    if last_tool_name == "clear_session_memory":
+        return (
+            f"已清空会话 {tool_output['session_id']} 的记忆，"
+            f"共删除 {tool_output['deleted_count']} 条历史记录。"
+        )
+
     return "工具执行完成。"
 
 
 def _build_unsupported_message() -> str:
     available = ", ".join(tool["name"] for tool in list_tools())
-    return f"当前这个 Day 5 Agent 只支持这些工具：{available}。你可以让我做向量化、文档重排、文档总结，或计算数学表达式。"
+    return (
+        f"当前这个 Day 6 Agent 只支持这些工具：{available}。"
+        "你可以让我做向量化、文档重排、文档总结、计算数学表达式，或清空某个会话的记忆。"
+    )
 
 
 def _remember(payload: AgentRequest, response: AgentResponse) -> None:
     if not payload.session_id:
+        return
+    if response.status != "completed":
+        return
+    if "clear_session_memory" in response.planned_tools:
         return
     memory_store.append_interaction(
         session_id=payload.session_id,

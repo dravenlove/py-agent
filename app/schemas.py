@@ -45,6 +45,7 @@ class AgentRequest(BaseModel):
     documents: list[str] | None = None
     top_n: int | None = Field(default=None, ge=1)
     session_id: str | None = Field(default=None, min_length=1, max_length=128)
+    confirm: bool | None = None
 
 
 class AgentStep(BaseModel):
@@ -54,6 +55,7 @@ class AgentStep(BaseModel):
 
 
 class AgentResponse(BaseModel):
+    status: str = "completed"
     input: str
     selected_tool: str
     planned_tools: list[str]
@@ -61,5 +63,7 @@ class AgentResponse(BaseModel):
     final_answer: str
     session_id: str | None = None
     memory_used: bool = False
+    approval_required: bool = False
+    approval_message: str | None = None
     tool_input: dict[str, Any] | None = None
     tool_output: dict[str, Any] | None = None

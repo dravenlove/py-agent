@@ -20,7 +20,7 @@ def reset_metrics() -> None:
 def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "day": 5}
+    assert response.json() == {"status": "ok", "day": 6}
     assert "X-Request-ID" in response.headers
 
 
@@ -205,6 +205,7 @@ def test_metrics_counts_failed_requests(monkeypatch) -> None:
 def test_agent_endpoint_with_mocked_service(monkeypatch) -> None:
     async def mock_run_agent(_payload) -> AgentResponse:
         return AgentResponse(
+            status="completed",
             input="请把这句话转成向量",
             selected_tool="embed_text",
             planned_tools=["embed_text"],
@@ -216,6 +217,8 @@ def test_agent_endpoint_with_mocked_service(monkeypatch) -> None:
             final_answer="已完成向量化。",
             session_id=None,
             memory_used=False,
+            approval_required=False,
+            approval_message=None,
             tool_input={"input_text": "请把这句话转成向量"},
             tool_output={"dimensions": 3},
         )
@@ -232,3 +235,32 @@ def test_agent_endpoint_with_mocked_service(monkeypatch) -> None:
 def test_agent_validation() -> None:
     response = client.post("/agent", json={"input": ""})
     assert response.status_code == 422
+
+
+def test_agent_endpoint_returns_pending_confirmation(monkeypatch) -> None:
+    async def mock_run_agent(_payload) -> AgentResponse:
+        return AgentResponse(
+            status="needs_confirmation",
+            input="请清空这个会话的记忆",
+            selected_tool="clear_session_memory",
+            planned_tools=["clear_session_memory"],
+            steps=[
+                AgentStep(name="inspect_input", status="completed", detail="Parsed request."),
+                AgentStep(name="await_confirmation", status="pending", detail="Need confirmation."),
+            ],
+            final_answer="该操作需要确认。",
+            session_id="demo-risk",
+            memory_used=False,
+            approval_required=True,
+            approval_message="该操作需要确认。",
+            tool_input={"session_id": "demo-risk"},
+            tool_output=None,
+        )
+
+    monkeypatch.setattr(main_module, "run_agent", mock_run_agent)
+    response = client.post("/agent", json={"input": "请清空这个会话的记忆", "session_id": "demo-risk"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_confirmation"
+    assert body["approval_required"] is True
