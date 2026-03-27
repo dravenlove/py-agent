@@ -6,4 +6,7 @@ __pycache__/
 .env
 .pytest_cache/
 .ruff_cache/
-
+eval/reports/*.json
+eval/reports/*.md
+eval/comparisons/*.json
+eval/comparisons/*.md
