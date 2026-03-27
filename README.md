@@ -54,6 +54,12 @@
 - [x] `/agent/runs` endpoint for inspecting recent agent activity
 - [x] Run history CLI for filtered audit inspection
 
+## Day 8 Delivered
+- [x] Local agent evaluation dataset under `eval/`
+- [x] Eval runner for tool selection, status, and answer checks
+- [x] Summary metrics for pass rate and routing accuracy
+- [x] Eval tests for dataset loading and scoring logic
+
 ## Quick Start
 ```powershell
 py -3.11 -m venv .venv
@@ -171,6 +177,7 @@ python scripts/agent_cli.py --input "请清空这个会话的记忆" --session-i
 python scripts/agent_cli.py --input "请清空这个会话的记忆" --session-id demo-1 --confirm
 python scripts/agent_runs_cli.py --limit 10
 python scripts/agent_runs_cli.py --session-id demo-1 --limit 5
+python scripts/eval_agent.py
 ```
 
 ## Day 3 Load Test
@@ -203,11 +210,13 @@ py-openclaw/
 │  ├─ agent_runs_cli.py
 │  ├─ chat_cli.py
 │  ├─ embedding_cli.py
+│  ├─ eval_agent.py
 │  ├─ load_test.py
 │  └─ rerank_cli.py
 ├─ prompts/
 ├─ docs/
 ├─ eval/
+│  └─ agent_eval_cases.json
 ├─ .env.example
 ├─ .gitignore
 ├─ requirements.txt
