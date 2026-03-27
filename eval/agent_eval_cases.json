@@ -1,0 +1,59 @@
+[
+  {
+    "name": "calculator_basic",
+    "input": "请计算 23 * 7",
+    "expected_selected_tool": "calculator",
+    "expected_status": "completed",
+    "expected_final_answer_contains": ["161"]
+  },
+  {
+    "name": "embed_basic",
+    "input": "请把这句话转成向量",
+    "expected_selected_tool": "embed_text",
+    "expected_status": "completed",
+    "expected_final_answer_contains": ["向量化"]
+  },
+  {
+    "name": "unsupported_poem",
+    "input": "帮我写一首诗",
+    "expected_selected_tool": "unsupported",
+    "expected_status": "completed",
+    "expected_final_answer_contains": ["只支持这些工具"]
+  },
+  {
+    "name": "memory_clear_needs_confirmation",
+    "input": "请清空这个会话的记忆",
+    "session_id": "eval-risk-1",
+    "confirm": null,
+    "seed_memory": [
+      {
+        "user_input": "旧请求",
+        "planned_tools": ["rerank_documents"],
+        "tool_input": {"documents": ["文档A"]},
+        "tool_output": {"best_match": {"document": "文档A"}},
+        "final_answer": "旧回答"
+      }
+    ],
+    "expected_selected_tool": "clear_session_memory",
+    "expected_status": "needs_confirmation",
+    "expected_final_answer_contains": ["confirm=true"]
+  },
+  {
+    "name": "memory_clear_confirmed",
+    "input": "请清空这个会话的记忆",
+    "session_id": "eval-risk-2",
+    "confirm": true,
+    "seed_memory": [
+      {
+        "user_input": "旧请求",
+        "planned_tools": ["rerank_documents"],
+        "tool_input": {"documents": ["文档A"]},
+        "tool_output": {"best_match": {"document": "文档A"}},
+        "final_answer": "旧回答"
+      }
+    ],
+    "expected_selected_tool": "clear_session_memory",
+    "expected_status": "completed",
+    "expected_final_answer_contains": ["已清空会话", "1 条历史记录"]
+  }
+]
