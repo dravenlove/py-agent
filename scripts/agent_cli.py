@@ -13,12 +13,15 @@ load_dotenv(PROJECT_ROOT / ".env", encoding="utf-8-sig")
 
 def main() -> None:
     default_url = os.getenv("AGENT_API_URL", "http://127.0.0.1:8000/agent")
-    parser = argparse.ArgumentParser(description="Call the local Day 4 agent endpoint.")
+    parser = argparse.ArgumentParser(description="Call the local Day 6 agent endpoint.")
     parser.add_argument("--url", default=default_url, help="Agent endpoint URL.")
     parser.add_argument("--input", default=None, help="Agent task input. If omitted, prompt from stdin.")
     parser.add_argument("--doc", action="append", default=[], help="Candidate document text for rerank tasks.")
     parser.add_argument("--top-n", type=int, default=None, help="Optional top_n for rerank tasks.")
     parser.add_argument("--session-id", default=None, help="Optional session id for memory-aware agent runs.")
+    confirmation_group = parser.add_mutually_exclusive_group()
+    confirmation_group.add_argument("--confirm", action="store_true", help="Explicitly approve risky agent actions.")
+    confirmation_group.add_argument("--deny", action="store_true", help="Explicitly reject risky agent actions.")
     args = parser.parse_args()
 
     user_input = args.input or input("Agent task: ").strip()
@@ -33,6 +36,10 @@ def main() -> None:
         payload["top_n"] = args.top_n
     if args.session_id:
         payload["session_id"] = args.session_id
+    if args.confirm:
+        payload["confirm"] = True
+    elif args.deny:
+        payload["confirm"] = False
 
     preview = {
         "method": "POST",

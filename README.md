@@ -42,6 +42,12 @@
 - [x] Ability to reuse previous documents from memory
 - [x] Agent CLI support for memory-aware runs
 
+## Day 6 Delivered
+- [x] Human-in-the-loop confirmation flow for risky actions
+- [x] `clear_session_memory` tool for deleting remembered session state
+- [x] Pending / cancelled / completed agent statuses
+- [x] Agent CLI support for `--confirm` / `--deny`
+
 ## Quick Start
 ```powershell
 py -3.11 -m venv .venv
@@ -124,6 +130,21 @@ Invoke-RestMethod `
   -Body '{"input":"继续比较这些文档并总结一下","session_id":"demo-1"}'
 ```
 
+8. Agent with confirmation:
+```powershell
+Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/agent `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"input":"请清空这个会话的记忆","session_id":"demo-1"}'
+
+Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/agent `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"input":"请清空这个会话的记忆","session_id":"demo-1","confirm":true}'
+```
+
 ## Local CLI Test
 ```powershell
 python scripts/chat_cli.py --message "给我一个 Day 2 学习建议"
@@ -133,6 +154,8 @@ python scripts/agent_cli.py --input "请计算 23 * 7"
 python scripts/agent_cli.py --input "帮我找出最相关的文档" --doc "进入设置页点击重置密码" --doc "联系客服修改邮箱"
 python scripts/agent_cli.py --input "帮我找出最相关的文档" --doc "进入设置页点击重置密码" --doc "联系客服修改邮箱" --session-id demo-1
 python scripts/agent_cli.py --input "继续比较这些文档并总结一下" --session-id demo-1
+python scripts/agent_cli.py --input "请清空这个会话的记忆" --session-id demo-1
+python scripts/agent_cli.py --input "请清空这个会话的记忆" --session-id demo-1 --confirm
 ```
 
 ## Day 3 Load Test

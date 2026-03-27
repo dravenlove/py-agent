@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.embedding_client import generate_embedding
+from app.memory import memory_store
 from app.rerank_client import generate_rerank
 
 ToolRunner = Callable[..., Awaitable["ToolExecutionResult"]]
@@ -80,6 +81,14 @@ async def run_summarize_text(text: str) -> ToolExecutionResult:
     )
 
 
+async def run_clear_session_memory(session_id: str) -> ToolExecutionResult:
+    deleted_count = memory_store.clear_session(session_id)
+    return ToolExecutionResult(
+        summary=f"Cleared {deleted_count} stored interaction(s) from session memory.",
+        output={"session_id": session_id, "deleted_count": deleted_count},
+    )
+
+
 def get_tool_registry() -> dict[str, ToolDefinition]:
     return {
         "embed_text": ToolDefinition(
@@ -101,6 +110,11 @@ def get_tool_registry() -> dict[str, ToolDefinition]:
             name="summarize_text",
             description="Create a short summary from a selected text snippet.",
             runner=run_summarize_text,
+        ),
+        "clear_session_memory": ToolDefinition(
+            name="clear_session_memory",
+            description="Delete all remembered interactions for a session after explicit confirmation.",
+            runner=run_clear_session_memory,
         ),
     }
 
