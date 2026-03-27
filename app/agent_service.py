@@ -4,8 +4,11 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
+from app.audit import agent_run_store
 from app.memory import memory_store
+from app.observability import get_request_id
 from app.schemas import AgentRequest, AgentResponse, AgentStep
 from app.tools import get_tool_registry, list_tools
 
@@ -40,6 +43,7 @@ class PlannedAction:
 
 
 async def run_agent(payload: AgentRequest) -> AgentResponse:
+    run_id = uuid4().hex[:12]
     steps = [AgentStep(name="inspect_input", status="completed", detail="Parsed the incoming agent request.")]
     memory_used = False
     documents = payload.documents
@@ -78,6 +82,7 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
         )
         response = AgentResponse(
             status="completed",
+            run_id=run_id,
             input=payload.input,
             selected_tool="unsupported",
             planned_tools=[],
@@ -91,6 +96,7 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
             tool_output={"available_tools": list_tools()},
         )
         _remember(payload, response)
+        _record_run(payload, response)
         return response
 
     steps.append(AgentStep(name="select_tool", status="completed", detail=planned_actions[0].detail))
@@ -111,8 +117,9 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
         approval_message = first_action.confirmation_message or "This action requires explicit confirmation."
         if payload.confirm is None:
             steps.append(AgentStep(name="await_confirmation", status="pending", detail=approval_message))
-            return AgentResponse(
+            response = AgentResponse(
                 status="needs_confirmation",
+                run_id=run_id,
                 input=payload.input,
                 selected_tool=first_action.tool_name,
                 planned_tools=[action.tool_name for action in planned_actions],
@@ -125,6 +132,8 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
                 tool_input=dict(first_action.tool_input),
                 tool_output=None,
             )
+            _record_run(payload, response)
+            return response
         if payload.confirm is False:
             steps.append(
                 AgentStep(
@@ -133,8 +142,9 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
                     detail="Cancelled the risky action because confirmation was explicitly rejected.",
                 )
             )
-            return AgentResponse(
+            response = AgentResponse(
                 status="cancelled",
+                run_id=run_id,
                 input=payload.input,
                 selected_tool=first_action.tool_name,
                 planned_tools=[action.tool_name for action in planned_actions],
@@ -147,6 +157,8 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
                 tool_input=dict(first_action.tool_input),
                 tool_output=None,
             )
+            _record_run(payload, response)
+            return response
         steps.append(
             AgentStep(
                 name="confirmation_received",
@@ -169,6 +181,7 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
     selected_tool = planned_actions[0].tool_name
     response = AgentResponse(
         status="completed",
+        run_id=run_id,
         input=payload.input,
         selected_tool=selected_tool,
         planned_tools=[action.tool_name for action in planned_actions],
@@ -182,6 +195,7 @@ async def run_agent(payload: AgentRequest) -> AgentResponse:
         tool_output=current_output,
     )
     _remember(payload, response)
+    _record_run(payload, response)
     return response
 
 
@@ -325,8 +339,8 @@ def _build_final_answer(last_tool_name: str, tool_output: dict[str, Any]) -> str
 def _build_unsupported_message() -> str:
     available = ", ".join(tool["name"] for tool in list_tools())
     return (
-        f"当前这个 Day 6 Agent 只支持这些工具：{available}。"
-        "你可以让我做向量化、文档重排、文档总结、计算数学表达式，或清空某个会话的记忆。"
+        f"当前这个 Day 7 Agent 只支持这些工具：{available}。"
+        "你可以让我做向量化、文档重排、文档总结、计算数学表达式、清空某个会话的记忆，或查看最近的运行历史。"
     )
 
 
@@ -344,4 +358,21 @@ def _remember(payload: AgentRequest, response: AgentResponse) -> None:
         tool_input=response.tool_input,
         tool_output=response.tool_output,
         final_answer=response.final_answer,
+    )
+
+
+def _record_run(payload: AgentRequest, response: AgentResponse) -> None:
+    agent_run_store.append_run(
+        {
+            "run_id": response.run_id,
+            "request_id": get_request_id(),
+            "input": payload.input,
+            "status": response.status,
+            "selected_tool": response.selected_tool,
+            "planned_tools": list(response.planned_tools),
+            "session_id": payload.session_id,
+            "approval_required": response.approval_required,
+            "memory_used": response.memory_used,
+            "final_answer": response.final_answer,
+        }
     )

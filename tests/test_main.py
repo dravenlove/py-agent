@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
+from app.audit import agent_run_store
 from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
 from app.main import app
 from app.memory import memory_store
@@ -15,12 +16,13 @@ client = TestClient(app)
 def reset_metrics() -> None:
     metrics_store.reset()
     memory_store.reset()
+    agent_run_store.reset()
 
 
 def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "day": 6}
+    assert response.json() == {"status": "ok", "day": 7}
     assert "X-Request-ID" in response.headers
 
 
@@ -206,6 +208,7 @@ def test_agent_endpoint_with_mocked_service(monkeypatch) -> None:
     async def mock_run_agent(_payload) -> AgentResponse:
         return AgentResponse(
             status="completed",
+            run_id="run-123",
             input="请把这句话转成向量",
             selected_tool="embed_text",
             planned_tools=["embed_text"],
@@ -241,6 +244,7 @@ def test_agent_endpoint_returns_pending_confirmation(monkeypatch) -> None:
     async def mock_run_agent(_payload) -> AgentResponse:
         return AgentResponse(
             status="needs_confirmation",
+            run_id="run-risk",
             input="请清空这个会话的记忆",
             selected_tool="clear_session_memory",
             planned_tools=["clear_session_memory"],
@@ -264,3 +268,15 @@ def test_agent_endpoint_returns_pending_confirmation(monkeypatch) -> None:
     body = response.json()
     assert body["status"] == "needs_confirmation"
     assert body["approval_required"] is True
+
+
+def test_agent_runs_endpoint_returns_recorded_runs() -> None:
+    response = client.post("/agent", json={"input": "请计算 23 * 7"})
+    runs_response = client.get("/agent/runs")
+
+    assert response.status_code == 200
+    assert runs_response.status_code == 200
+    body = runs_response.json()
+    assert len(body["runs"]) == 1
+    assert body["runs"][0]["selected_tool"] == "calculator"
+    assert body["runs"][0]["status"] == "completed"

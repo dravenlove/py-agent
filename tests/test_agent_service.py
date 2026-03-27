@@ -2,6 +2,7 @@ import pytest
 
 import app.agent_service as agent_service
 import app.tools as tools_module
+from app.audit import agent_run_store
 from app.memory import memory_store
 from app.schemas import AgentRequest
 from app.tools import ToolExecutionResult
@@ -10,6 +11,7 @@ from app.tools import ToolExecutionResult
 @pytest.fixture(autouse=True)
 def reset_memory() -> None:
     memory_store.reset()
+    agent_run_store.reset()
 
 
 @pytest.mark.anyio
@@ -24,6 +26,7 @@ async def test_run_agent_selects_embed_tool(monkeypatch) -> None:
 
     response = await agent_service.run_agent(AgentRequest(input="请把这句话转成向量"))
 
+    assert response.run_id
     assert response.selected_tool == "embed_text"
     assert response.steps[1].name == "select_tool"
     assert response.tool_output["dimensions"] == 3
@@ -202,3 +205,15 @@ async def test_run_agent_can_reject_risky_action() -> None:
     assert response.status == "cancelled"
     assert response.selected_tool == "clear_session_memory"
     assert memory_store.get_recent("session-risk")
+
+
+@pytest.mark.anyio
+async def test_run_agent_records_audit_trail() -> None:
+    response = await agent_service.run_agent(AgentRequest(input="请计算 2 + 3"))
+    runs = agent_run_store.list_runs()
+
+    assert response.run_id
+    assert len(runs) == 1
+    assert runs[0]["run_id"] == response.run_id
+    assert runs[0]["selected_tool"] == "calculator"
+    assert runs[0]["status"] == "completed"

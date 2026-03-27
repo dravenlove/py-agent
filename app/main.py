@@ -2,10 +2,11 @@ import logging
 from time import perf_counter
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from starlette.responses import Response
 
 from app.agent_service import run_agent
+from app.audit import agent_run_store
 from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
 from app.embedding_client import generate_embedding
 from app.llm_client import generate_reply
@@ -14,6 +15,7 @@ from app.rerank_client import generate_rerank
 from app.schemas import (
     AgentRequest,
     AgentResponse,
+    AgentRunsResponse,
     ChatRequest,
     ChatResponse,
     EmbeddingRequest,
@@ -25,7 +27,7 @@ from app.settings import settings
 
 logger = logging.getLogger("ai_agent.http")
 
-app = FastAPI(title="AI Agent 30D", version="0.6.0")
+app = FastAPI(title="AI Agent 30D", version="0.7.0")
 
 
 @app.middleware("http")
@@ -60,7 +62,7 @@ async def request_context_middleware(request: Request, call_next) -> Response:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "day": 6}
+    return {"status": "ok", "day": 7}
 
 
 @app.get("/metrics")
@@ -156,3 +158,11 @@ async def agent(payload: AgentRequest) -> AgentResponse:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Agent request failed.") from exc
+
+
+@app.get("/agent/runs", response_model=AgentRunsResponse)
+async def agent_runs(
+    session_id: str | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> AgentRunsResponse:
+    return AgentRunsResponse(runs=agent_run_store.list_runs(limit=limit, session_id=session_id))

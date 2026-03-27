@@ -56,6 +56,7 @@ class AgentStep(BaseModel):
 
 class AgentResponse(BaseModel):
     status: str = "completed"
+    run_id: str
     input: str
     selected_tool: str
     planned_tools: list[str]
@@ -67,3 +68,20 @@ class AgentResponse(BaseModel):
     approval_message: str | None = None
     tool_input: dict[str, Any] | None = None
     tool_output: dict[str, Any] | None = None
+
+
+class AgentRunSummary(BaseModel):
+    run_id: str
+    request_id: str
+    input: str
+    status: str
+    selected_tool: str
+    planned_tools: list[str]
+    session_id: str | None = None
+    approval_required: bool = False
+    memory_used: bool = False
+    final_answer: str
+
+
+class AgentRunsResponse(BaseModel):
+    runs: list[AgentRunSummary]
