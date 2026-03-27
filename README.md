@@ -66,6 +66,12 @@
 - [x] Expanded eval dataset to cover rejected risky actions
 - [x] Report-writing tests for reproducible local evaluation output
 
+## Day 10 Delivered
+- [x] Saved comparison reports under `eval/comparisons/`
+- [x] Eval-report diff tool for regression detection
+- [x] Automatic latest-two-report comparison when paths are omitted
+- [x] Comparison tests for regressions, improvements, and new cases
+
 ## Quick Start
 ```powershell
 py -3.11 -m venv .venv
@@ -185,6 +191,8 @@ python scripts/agent_runs_cli.py --limit 10
 python scripts/agent_runs_cli.py --session-id demo-1 --limit 5
 python scripts/eval_agent.py
 python scripts/eval_agent.py --save
+python scripts/compare_eval_reports.py
+python scripts/compare_eval_reports.py --save
 ```
 
 ## Day 3 Load Test
@@ -217,6 +225,7 @@ py-openclaw/
 │  ├─ agent_cli.py
 │  ├─ agent_runs_cli.py
 │  ├─ chat_cli.py
+│  ├─ compare_eval_reports.py
 │  ├─ embedding_cli.py
 │  ├─ eval_agent.py
 │  ├─ load_test.py
@@ -225,6 +234,7 @@ py-openclaw/
 ├─ docs/
 ├─ eval/
 │  └─ agent_eval_cases.json
+│  ├─ comparisons/
 │  └─ reports/
 ├─ .env.example
 ├─ .gitignore
