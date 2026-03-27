@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.errors import UpstreamAuthError, UpstreamNotFoundError, UpstreamServiceError, UpstreamTimeoutError
 from app.main import app
+from app.memory import memory_store
 from app.observability import metrics_store
 from app.schemas import AgentResponse, AgentStep
 
@@ -13,12 +14,13 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def reset_metrics() -> None:
     metrics_store.reset()
+    memory_store.reset()
 
 
 def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "day": 4}
+    assert response.json() == {"status": "ok", "day": 5}
     assert "X-Request-ID" in response.headers
 
 
@@ -205,11 +207,15 @@ def test_agent_endpoint_with_mocked_service(monkeypatch) -> None:
         return AgentResponse(
             input="请把这句话转成向量",
             selected_tool="embed_text",
+            planned_tools=["embed_text"],
             steps=[
                 AgentStep(name="inspect_input", status="completed", detail="Parsed request."),
+                AgentStep(name="select_tool", status="completed", detail="Matched embed intent."),
                 AgentStep(name="run_tool", status="completed", detail="Embedded text."),
             ],
             final_answer="已完成向量化。",
+            session_id=None,
+            memory_used=False,
             tool_input={"input_text": "请把这句话转成向量"},
             tool_output={"dimensions": 3},
         )

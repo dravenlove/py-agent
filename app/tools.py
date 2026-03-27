@@ -72,6 +72,14 @@ async def run_calculator(expression: str) -> ToolExecutionResult:
     )
 
 
+async def run_summarize_text(text: str) -> ToolExecutionResult:
+    summary = _summarize_text(text)
+    return ToolExecutionResult(
+        summary="Summarized the selected text snippet.",
+        output={"source_text": text, "summary": summary},
+    )
+
+
 def get_tool_registry() -> dict[str, ToolDefinition]:
     return {
         "embed_text": ToolDefinition(
@@ -88,6 +96,11 @@ def get_tool_registry() -> dict[str, ToolDefinition]:
             name="calculator",
             description="Safely evaluate a basic arithmetic expression.",
             runner=run_calculator,
+        ),
+        "summarize_text": ToolDefinition(
+            name="summarize_text",
+            description="Create a short summary from a selected text snippet.",
+            runner=run_summarize_text,
         ),
     }
 
@@ -125,3 +138,22 @@ def _evaluate_node(node: ast.AST) -> float:
         return _UNARY_OPERATORS[type(node.op)](operand)
 
     raise ValueError("Unsupported calculator expression.")
+
+
+def _summarize_text(text: str, max_sentences: int = 2, max_chars: int = 180) -> str:
+    normalized = " ".join(text.split()).strip()
+    if not normalized:
+        raise ValueError("Cannot summarize empty text.")
+
+    sentences = [
+        part.strip()
+        for part in normalized.replace("。", "。\n").replace("！", "！\n").replace("？", "？\n").splitlines()
+        if part.strip()
+    ]
+    if not sentences:
+        sentences = [normalized]
+
+    summary = " ".join(sentences[:max_sentences]).strip()
+    if len(summary) > max_chars:
+        summary = f"{summary[: max_chars - 3].rstrip()}..."
+    return summary

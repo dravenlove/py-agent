@@ -2,8 +2,14 @@ import pytest
 
 import app.agent_service as agent_service
 import app.tools as tools_module
+from app.memory import memory_store
 from app.schemas import AgentRequest
 from app.tools import ToolExecutionResult
+
+
+@pytest.fixture(autouse=True)
+def reset_memory() -> None:
+    memory_store.reset()
 
 
 @pytest.mark.anyio
@@ -62,3 +68,74 @@ async def test_run_agent_returns_capability_summary_when_no_tool_matches() -> No
     assert response.selected_tool == "unsupported"
     assert "只支持这些工具" in response.final_answer
     assert "available_tools" in response.tool_output
+
+
+@pytest.mark.anyio
+async def test_run_agent_plans_rerank_then_summary(monkeypatch) -> None:
+    async def mock_run_rerank_documents(query: str, documents: list[str], top_n: int | None = None) -> ToolExecutionResult:
+        return ToolExecutionResult(
+            summary="Reranked docs.",
+            output={
+                "model": "mock-rerank",
+                "results": [{"index": 0, "score": 0.95, "document": documents[0]}],
+                "best_match": {"index": 0, "score": 0.95, "document": documents[0]},
+            },
+        )
+
+    async def mock_run_summarize_text(text: str) -> ToolExecutionResult:
+        return ToolExecutionResult(summary="Summarized text.", output={"source_text": text, "summary": "这是摘要。"})
+
+    monkeypatch.setattr(tools_module, "run_rerank_documents", mock_run_rerank_documents)
+    monkeypatch.setattr(tools_module, "run_summarize_text", mock_run_summarize_text)
+
+    response = await agent_service.run_agent(
+        AgentRequest(
+            input="请先找出最相关的文档，再总结一下",
+            documents=["第一段文档", "第二段文档"],
+            top_n=1,
+        )
+    )
+
+    assert response.planned_tools == ["rerank_documents", "summarize_text"]
+    assert response.tool_output["summary"] == "这是摘要。"
+    assert "总结结果" in response.final_answer
+
+
+@pytest.mark.anyio
+async def test_run_agent_reuses_session_documents() -> None:
+    async def mock_run_rerank_documents(query: str, documents: list[str], top_n: int | None = None) -> ToolExecutionResult:
+        return ToolExecutionResult(
+            summary="Reranked docs.",
+            output={
+                "model": "mock-rerank",
+                "results": [{"index": 0, "score": 0.88, "document": documents[0]}],
+                "best_match": {"index": 0, "score": 0.88, "document": documents[0]},
+            },
+        )
+
+    async def mock_run_summarize_text(text: str) -> ToolExecutionResult:
+        return ToolExecutionResult(summary="Summarized text.", output={"source_text": text, "summary": "这是记忆摘要。"})
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(tools_module, "run_rerank_documents", mock_run_rerank_documents)
+    monkeypatch.setattr(tools_module, "run_summarize_text", mock_run_summarize_text)
+
+    first = await agent_service.run_agent(
+        AgentRequest(
+            input="帮我找出最相关的文档",
+            documents=["文档A", "文档B"],
+            session_id="session-1",
+        )
+    )
+    second = await agent_service.run_agent(
+        AgentRequest(
+            input="继续比较这些文档并总结一下",
+            session_id="session-1",
+        )
+    )
+
+    assert first.session_id == "session-1"
+    assert second.memory_used is True
+    assert second.tool_input["documents"] == ["文档A", "文档B"]
+    assert second.planned_tools[0] == "rerank_documents"
+    monkeypatch.undo()

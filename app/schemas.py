@@ -44,6 +44,7 @@ class AgentRequest(BaseModel):
     input: str = Field(min_length=1, max_length=4000)
     documents: list[str] | None = None
     top_n: int | None = Field(default=None, ge=1)
+    session_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class AgentStep(BaseModel):
@@ -55,7 +56,10 @@ class AgentStep(BaseModel):
 class AgentResponse(BaseModel):
     input: str
     selected_tool: str
+    planned_tools: list[str]
     steps: list[AgentStep]
     final_answer: str
+    session_id: str | None = None
+    memory_used: bool = False
     tool_input: dict[str, Any] | None = None
     tool_output: dict[str, Any] | None = None

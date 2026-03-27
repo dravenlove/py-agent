@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--input", default=None, help="Agent task input. If omitted, prompt from stdin.")
     parser.add_argument("--doc", action="append", default=[], help="Candidate document text for rerank tasks.")
     parser.add_argument("--top-n", type=int, default=None, help="Optional top_n for rerank tasks.")
+    parser.add_argument("--session-id", default=None, help="Optional session id for memory-aware agent runs.")
     args = parser.parse_args()
 
     user_input = args.input or input("Agent task: ").strip()
@@ -30,6 +31,8 @@ def main() -> None:
         payload["documents"] = documents
     if args.top_n is not None:
         payload["top_n"] = args.top_n
+    if args.session_id:
+        payload["session_id"] = args.session_id
 
     preview = {
         "method": "POST",

@@ -60,7 +60,7 @@ async def request_context_middleware(request: Request, call_next) -> Response:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "day": 4}
+    return {"status": "ok", "day": 5}
 
 
 @app.get("/metrics")
