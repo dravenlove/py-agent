@@ -55,5 +55,23 @@
     "expected_selected_tool": "clear_session_memory",
     "expected_status": "completed",
     "expected_final_answer_contains": ["已清空会话", "1 条历史记录"]
+  },
+  {
+    "name": "memory_clear_rejected",
+    "input": "请清空这个会话的记忆",
+    "session_id": "eval-risk-3",
+    "confirm": false,
+    "seed_memory": [
+      {
+        "user_input": "旧请求",
+        "planned_tools": ["rerank_documents"],
+        "tool_input": {"documents": ["文档A"]},
+        "tool_output": {"best_match": {"document": "文档A"}},
+        "final_answer": "旧回答"
+      }
+    ],
+    "expected_selected_tool": "clear_session_memory",
+    "expected_status": "cancelled",
+    "expected_final_answer_contains": ["已取消"]
   }
 ]

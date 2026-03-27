@@ -60,6 +60,12 @@
 - [x] Summary metrics for pass rate and routing accuracy
 - [x] Eval tests for dataset loading and scoring logic
 
+## Day 9 Delivered
+- [x] Saved JSON + Markdown eval reports under `eval/reports/`
+- [x] Failure-summary aggregation for tool, status, and answer mismatches
+- [x] Expanded eval dataset to cover rejected risky actions
+- [x] Report-writing tests for reproducible local evaluation output
+
 ## Quick Start
 ```powershell
 py -3.11 -m venv .venv
@@ -178,6 +184,7 @@ python scripts/agent_cli.py --input "请清空这个会话的记忆" --session-i
 python scripts/agent_runs_cli.py --limit 10
 python scripts/agent_runs_cli.py --session-id demo-1 --limit 5
 python scripts/eval_agent.py
+python scripts/eval_agent.py --save
 ```
 
 ## Day 3 Load Test
@@ -204,6 +211,7 @@ py-openclaw/
 │  └─ settings.py
 ├─ tests/
 │  ├─ test_agent_service.py
+│  ├─ test_eval_agent.py
 │  └─ test_main.py
 ├─ scripts/
 │  ├─ agent_cli.py
@@ -217,6 +225,7 @@ py-openclaw/
 ├─ docs/
 ├─ eval/
 │  └─ agent_eval_cases.json
+│  └─ reports/
 ├─ .env.example
 ├─ .gitignore
 ├─ requirements.txt
